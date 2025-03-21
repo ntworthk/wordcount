@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF word analyser</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 15px;
+            color: #444;
+        }
+
+        section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* Drag and drop styling */
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover, .upload-area.active {
+            border-color: #4CAF50;
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+
+        .upload-area p {
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        .upload-icon {
+            font-size: 36px;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .setting {
+            margin-bottom: 15px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 5px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        .remove-file {
+            color: red;
+            cursor: pointer;
+        }
+
+        #file-list {
+            margin-top: 15px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .chart-item {
+            background: #f9f9f9;
+            border-radius: 4px;
+            padding: 15px;
+        }
+
+        .placeholder-text {
+            text-align: center;
+            padding: 30px;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Chips styling */
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 5px;
+            min-height: 45px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 10px;
+            background: #e0f7fa;
+            border-radius: 20px;
+            margin: 3px;
+        }
+
+        .chip-text {
+            margin-right: 5px;
+        }
+
+        .chip-remove {
+            cursor: pointer;
+            color: #777;
+            font-weight: bold;
+        }
+
+        .chip-input {
+            border: none;
+            outline: none;
+            padding: 5px;
+            flex-grow: 1;
+            min-width: 100px;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Word comparison tool</h1>
+        </header>
+        
+        <section class="upload-section">
+            <div class="upload-area" id="upload-area">
+                <p>Drag and drop PDF files here</p>
+                <p>or click to select files</p>
+                <input type="file" id="pdf-upload" accept=".pdf" multiple>
+            </div>
+            <div id="file-list"></div>
+        </section>
+        
+        <section class="comparison-section" id="comparison-section">
+            <h2>Compare documents</h2>
+            <div class="setting">
+                <label>Words to compare:</label>
+                <div class="chips-container" id="chips-container">
+                    <input type="text" class="chip-input" id="chip-input" placeholder="Type a word and press Enter">
+                </div>
+            </div>
+            
+            <div id="comparison-container" style="margin-top: 30px;">
+                <div class="empty-state" id="comparison-empty">
+                    <p>Upload PDF files to see word frequency comparisons</p>
+                </div>
+                <div class="loading" id="comparison-loading" style="display: none;">
+                    <div class="loading-spinner"></div>
+                </div>
+                <div class="comparison-results" id="comparison-results" style="display: none;"></div>
+            </div>
+        </section>
+    </div>
+    
+    <!-- Required libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script>
+        // Set the worker source for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        
+        // Default PDFs to load from repository
+        const defaultPdfs = [
+            './pdfs/2008 ACCC Merger guidelines.pdf',
+            './pdfs/2022 ComCom Merger and acquisition guidelines.pdf',
+            './pdfs/2025 ACCC Draft merger guidelines.pdf'
+        ];
+
+        // Define common English stopwords
+        const stopwords = new Set([
+            'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren\'t', 'as', 'at',
+            'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by', 'can\'t', 'cannot', 'could',
+            'couldn\'t', 'did', 'didn\'t', 'do', 'does', 'doesn\'t', 'doing', 'don\'t', 'down', 'during', 'each', 'few', 'for',
+            'from', 'further', 'had', 'hadn\'t', 'has', 'hasn\'t', 'have', 'haven\'t', 'having', 'he', 'he\'d', 'he\'ll', 'he\'s',
+            'her', 'here', 'here\'s', 'hers', 'herself', 'him', 'himself', 'his', 'how', 'how\'s', 'i', 'i\'d', 'i\'ll', 'i\'m',
+            'i\'ve', 'if', 'in', 'into', 'is', 'isn\'t', 'it', 'it\'s', 'its', 'itself', 'let\'s', 'me', 'more', 'most', 'mustn\'t',
+            'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves',
+            'out', 'over', 'own', 'same', 'shan\'t', 'she', 'she\'d', 'she\'ll', 'she\'s', 'should', 'shouldn\'t', 'so', 'some',
+            'such', 'than', 'that', 'that\'s', 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'there\'s', 'these',
+            'they', 'they\'d', 'they\'ll', 'they\'re', 'they\'ve', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up',
+            'very', 'was', 'wasn\'t', 'we', 'we\'d', 'we\'ll', 'we\'re', 'we\'ve', 'were', 'weren\'t', 'what', 'what\'s', 'when',
+            'when\'s', 'where', 'where\'s', 'which', 'while', 'who', 'who\'s', 'whom', 'why', 'why\'s', 'with', 'won\'t', 'would',
+            'wouldn\'t', 'you', 'you\'d', 'you\'ll', 'you\'re', 'you\'ve', 'your', 'yours', 'yourself', 'yourselves'
+        ]);
+
+        // Initialize variables
+        let uploadedFiles = [];
+        let documentData = {};
+        let highlightedWords = [];
+        let charts = [];
+        
+
+        // DOM Elements
+        const uploadArea = document.getElementById('upload-area');
+        const pdfUpload = document.getElementById('pdf-upload');
+        const fileList = document.getElementById('file-list');
+        const chipsContainer = document.getElementById('chips-container');
+        const chipInput = document.getElementById('chip-input');
+        const comparisonSection = document.getElementById('comparison-section');
+        const comparisonResults = document.getElementById('comparison-results');
+
+        // Loading and empty state elements
+        const comparisonEmpty = document.getElementById('comparison-empty');
+        const comparisonLoading = document.getElementById('comparison-loading');
+
+        // Event listeners for drag and drop
+        uploadArea.addEventListener('click', () => pdfUpload.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('active');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('active');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('active');
+            
+            if (e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        // Event listeners
+        pdfUpload.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        // Chip input handler
+        chipInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                const value = this.value.trim();
+                if (value) {
+                    addChip(value);
+                    this.value = '';
+                    if (uploadedFiles.length > 0) {
+                        compareDocuments();
+                    }
+                }
+            }
+        });
+
+        // Handle files from either drag-drop or file input
+        function handleFiles(inputFiles) {
+            const files = Array.from(inputFiles);
+            let newFilesAdded = false;
+            
+            files.forEach(file => {
+                if (file.type === 'application/pdf' && !uploadedFiles.some(f => f.name === file.name)) {
+                    uploadedFiles.push(file);
+                    newFilesAdded = true;
+                    
+                    // Display in file list
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <span>${file.name}</span>
+                        <span class="remove-file" data-file="${file.name}">×</span>
+                    `;
+                    document.getElementById('file-list').appendChild(fileItem);
+                    
+                    // Add remove functionality
+                    fileItem.querySelector('.remove-file').addEventListener('click', removeFile);
+                }
+            });
+            
+            // Reset file input
+            pdfUpload.value = '';
+            
+            if (newFilesAdded && uploadedFiles.length > 0) {
+                processDocuments();
+            }
+        }
+
+        // Add a chip
+        function addChip(text) {
+            text = text.toLowerCase();
+            if (highlightedWords.includes(text)) return;
+            
+            highlightedWords.push(text);
+            
+            const chip = document.createElement('div');
+            chip.className = 'chip';
+            chip.innerHTML = `
+                <span class="chip-text">${text}</span>
+                <span class="chip-remove" data-word="${text}">×</span>
+            `;
+            
+            chipsContainer.insertBefore(chip, chipInput);
+            
+            // Add remove event listener
+            chip.querySelector('.chip-remove').addEventListener('click', function() {
+                const word = this.getAttribute('data-word');
+                removeChip(word);
+                if (uploadedFiles.length > 0) {
+                    compareDocuments();
+                }
+            });
+        }
+
+        // Remove a chip
+        function removeChip(word) {
+            highlightedWords = highlightedWords.filter(w => w !== word);
+            const chips = chipsContainer.querySelectorAll('.chip');
+            chips.forEach(chip => {
+                if (chip.querySelector('.chip-text').textContent === word) {
+                    chip.remove();
+                }
+            });
+        }
+
+        // Remove file from list
+        function removeFile(e) {
+            const fileName = e.target.getAttribute('data-file');
+            uploadedFiles = uploadedFiles.filter(file => file.name !== fileName);
+            e.target.parentElement.remove();
+            
+            // If we removed the last file, hide results
+            if (uploadedFiles.length === 0) {
+                resetResultsView();
+            } else {
+                processDocuments();
+            }
+        }
+
+        // Reset results view
+        function resetResultsView() {
+            comparisonEmpty.style.display = 'block';
+            comparisonResults.style.display = 'none';
+            documentData = {};
+        }
+
+        // Process documents
+        async function processDocuments() {
+            if (uploadedFiles.length === 0) {
+                resetResultsView();
+                return;
+            }
+            
+            // Show loading indicators
+            comparisonEmpty.style.display = 'none';
+            comparisonLoading.style.display = 'block';
+            comparisonResults.style.display = 'none';
+            
+            // Clear existing charts when documents change
+            charts.forEach(chart => chart.chart.destroy());
+            charts = [];
+            
+            // Clear previous data
+            documentData = {};
+            
+            comparisonSection.style.display = 'block';
+            
+            // Process each file
+            for (const file of uploadedFiles) {
+                try {
+                    const text = await extractTextFromPdf(file);
+                    const wordCount = countWords(text);
+                    
+                    documentData[file.name] = {
+                        text,
+                        wordCount,
+                        totalWords: Object.values(wordCount).reduce((sum, count) => sum + count, 0)
+                    };
+                } catch (error) {
+                    console.error(`Error processing ${file.name}:`, error);
+                }
+            }
+            
+            // Hide loading indicators
+            comparisonLoading.style.display = 'none';
+            
+            // Display results
+            if (Object.keys(documentData).length > 0) {
+                comparisonResults.style.display = 'block';
+                compareDocuments();
+            } else {
+                comparisonEmpty.style.display = 'block';
+            }
+        }
+
+        // Extract text from PDF
+        async function extractTextFromPdf(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const pageText = content.items.map(item => item.str).join(' ');
+                text += pageText + ' ';
+            }
+            
+            return text;
+        }
+
+        // Count word frequency - ignoring stopwords by default
+        function countWords(text) {
+            const words = text.toLowerCase()  // Convert to lowercase for case-insensitive counting
+                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
+                .split(/\s+/);
+            
+            const wordCount = {};
+            
+            words.forEach(word => {
+                // Skip empty words and stopwords
+                if (word === '' || stopwords.has(word)) {
+                    return;
+                }
+                
+                wordCount[word] = (wordCount[word] || 0) + 1;
+            });
+            
+            return wordCount;
+        }
+
+        // Compare documents
+        function compareDocuments() {
+            if (Object.keys(documentData).length === 0) {
+                return;
+            }
+            
+            // Generate a list of words to compare
+            let wordsToCompare = [];
+            
+            if (highlightedWords.length > 0) {
+                // Use highlighted words
+                wordsToCompare = highlightedWords;
+            } else {
+                // Find common words across documents
+                const allWords = new Set();
+                const docCount = {};
+                
+                Object.values(documentData).forEach(data => {
+                    const docWords = new Set(Object.keys(data.wordCount));
+                    docWords.forEach(word => {
+                        allWords.add(word);
+                        docCount[word] = (docCount[word] || 0) + 1;
+                    });
+                });
+                
+                // Get words that appear in all documents
+                const commonWords = Array.from(allWords).filter(word => 
+                    docCount[word] === Object.keys(documentData).length
+                );
+                
+                // Get top common words by total frequency
+                const wordFrequency = {};
+                commonWords.forEach(word => {
+                    wordFrequency[word] = Object.values(documentData).reduce((sum, data) => 
+                        sum + (data.wordCount[word] || 0), 0
+                    );
+                });
+                
+                wordsToCompare = Object.entries(wordFrequency)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)  // Top 5 common words
+                    .map(item => item[0]);
+            }
+            
+            if (wordsToCompare.length === 0) {
+                comparisonResults.innerHTML = '<p class="placeholder-text">No common words found across documents</p>';
+                return;
+            }
+            
+            // Track which words already have charts
+            const existingChartWords = charts.map(chart => chart.word);
+            const wordsToAdd = wordsToCompare.filter(word => !existingChartWords.includes(word));
+            const wordsToRemove = existingChartWords.filter(word => !wordsToCompare.includes(word));
+            
+            // Remove charts for words no longer needed
+            wordsToRemove.forEach(word => {
+                const chartIndex = charts.findIndex(chart => chart.word === word);
+                if (chartIndex !== -1) {
+                    charts[chartIndex].chart.destroy();
+                    charts.splice(chartIndex, 1);
+                    
+                    const chartElement = document.getElementById(`chart-item-${word}`);
+                    if (chartElement) {
+                        chartElement.remove();
+                    }
+                }
+            });
+            
+            // Prepare comparison container if empty
+            if (comparisonResults.innerHTML === '') {
+                comparisonResults.innerHTML = '';
+                const chartGrid = document.createElement('div');
+                chartGrid.className = 'chart-grid';
+                chartGrid.id = 'chart-grid';
+                comparisonResults.appendChild(chartGrid);
+            }
+            
+            const chartGrid = document.getElementById('chart-grid') || comparisonResults;
+            
+            // Create a chart only for new words
+            wordsToAdd.forEach(word => {
+                const chartItem = document.createElement('div');
+                chartItem.className = 'chart-item';
+                chartItem.id = `chart-item-${word}`;
+                
+                const canvasContainer = document.createElement('div');
+                canvasContainer.className = 'chart-container';
+                
+                const canvas = document.createElement('canvas');
+                canvas.id = `chart-${word}`;
+                canvasContainer.appendChild(canvas);
+                
+                const title = document.createElement('h3');
+                title.textContent = word;
+                
+                chartItem.appendChild(title);
+                chartItem.appendChild(canvasContainer);
+                chartGrid.appendChild(chartItem);
+                
+                // Prepare data - remove .pdf from filenames
+                const labels = Object.keys(documentData).map(name => name.replace('.pdf', ''));
+                const data = Object.keys(documentData).map(docName => {
+                    const doc = documentData[docName];
+                    // Case insensitive search for the word
+                    const count = doc.wordCount[word] || 0;
+                    return (count / doc.totalWords * 100).toFixed(2);
+                });
+                
+                // Create chart
+                const ctx = canvas.getContext('2d');
+                const wordChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '% of total words',
+                            data: data,
+                            backgroundColor: '#008698',
+                            borderColor: '#008698',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Proportion of words'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Store the word with the chart for tracking
+                wordChart.word = word;
+                charts.push({chart: wordChart, word: word});
+            });
+        }
+
+        // Add the default comparison words
+        addChip('unilateral');
+        addChip('coordinated');
+        addChip('diversion');
+        addChip('share');
+        
+        // Function to load a PDF from a URL
+        async function loadPdfFromUrl(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to load PDF from ${url}: ${response.statusText}`);
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const filename = url.split('/').pop(); // Extract filename from URL
+                
+                // Create a File object
+                const file = new File([arrayBuffer], filename, { type: 'application/pdf' });
+                
+                // Add to uploaded files if not already present
+                if (!uploadedFiles.some(f => f.name === file.name)) {
+                    uploadedFiles.push(file);
+                    
+                    // Add to file list display
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <span>${file.name}</span>
+                        <span class="remove-file" data-file="${file.name}">×</span>
+                    `;
+                    document.getElementById('file-list').appendChild(fileItem);
+                    
+                    // Add remove functionality
+                    fileItem.querySelector('.remove-file').addEventListener('click', removeFile);
+                    
+                    return true; // Successfully loaded
+                }
+                return false; // Already loaded
+            } catch (error) {
+                console.error(`Error loading PDF from ${url}:`, error);
+                return false;
+            }
+        }
+        
+        // Function to load all default PDFs
+        async function loadDefaultPdfs() {
+            let loadedCount = 0;
+            
+            // Show loading state
+            comparisonEmpty.textContent = 'Loading default PDFs...';
+            comparisonEmpty.style.display = 'block';
+            
+            for (const pdfUrl of defaultPdfs) {
+                const loaded = await loadPdfFromUrl(pdfUrl);
+                if (loaded) loadedCount++;
+            }
+            
+            if (loadedCount > 0) {
+                // Process the loaded PDFs
+                processDocuments();
+            } else {
+                comparisonEmpty.textContent = 'No default PDFs could be loaded. Please upload PDFs manually.';
+            }
+        }
+        
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load default PDFs
+            loadDefaultPdfs();
+        });
+    </script>
+</body>
+</html>
